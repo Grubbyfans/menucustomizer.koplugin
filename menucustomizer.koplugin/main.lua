@@ -2334,51 +2334,83 @@ local function discoverCustomItemsBeforeSort(config_prefix, item_table, order, s
     return changed
 end
 
+--- Pre-sort customization: discover third-party items, sync availability and
+--- (re)generate the override file. Extracted so the hook can call it under
+--- pcall independently of KOReader's own mergeAndSort.
+local function preSortCustomization(config_prefix, item_table, order)
+    local settings = getSettings()
+    local changed = discoverCustomItemsBeforeSort(config_prefix, item_table, order, settings)
+    if syncMenuAvailability(config_prefix, item_table, settings) then
+        changed = true
+    end
+    local settings_dir = DataStorage:getSettingsDir()
+    local override_path = string.format("%s/%s_menu_order.lua", settings_dir, config_prefix)
+
+    if changed then
+        saveSettings(settings)
+    end
+
+    if changed or lfs.attributes(override_path) then
+        generateOverrideFile(config_prefix, settings)
+    end
+end
+
+--- Post-sort customization: remove disabled items from the built menu table.
+--- Extracted so a filtering failure can never take down the whole menu.
+--- NOTE: The inline-submenu scan does not run here. It used to run once per
+--- session on the first menu build, adding a full traversal plus a large
+--- settings write to the first top-menu open. The scan now happens only when
+--- the plugin's own editor is opened (see the sub_item_table_func in
+--- addToMainMenu below).
+local function postSortFiltering(config_prefix, tab_item_table)
+    local settings = getSettings()
+    local disabled_items = (config_prefix == "reader") and settings.reader_disabled or settings.filemanager_disabled
+    if disabled_items and next(disabled_items) and type(tab_item_table) == "table" then
+        -- tab_item_table is an array of tabs; each tab is an array of menu
+        -- items. Filter each tab separately so inline (id-less) submenu items
+        -- like "sort_by::some_label" are actually reached.
+        for _, tab_items in ipairs(tab_item_table) do
+            filterItems(tab_items, disabled_items)
+        end
+    end
+end
+
 function MenuCustomizer:hookMenuSorter()
     local ok, MenuSorter = pcall(require, "ui/menusorter")
-    if not ok or not MenuSorter or MenuSorter._menucustomizer_hooked then
+    if not ok or type(MenuSorter) ~= "table" or MenuSorter._menucustomizer_hooked then
         return
     end
     local orig_mergeAndSort = MenuSorter.mergeAndSort
+    -- Feature detection: if KOReader no longer exposes mergeAndSort as a
+    -- function, do not install the hook at all.
+    if type(orig_mergeAndSort) ~= "function" then
+        logger.err("MenuCustomizer: ui/menusorter.mergeAndSort is not a function, hook skipped")
+        return
+    end
     MenuSorter._menucustomizer_hooked = true
 
     MenuSorter.mergeAndSort = function(ms_self, config_prefix, item_table, order)
-        if config_prefix == "reader" or config_prefix == "filemanager" then
-            local settings = getSettings()
-            local changed = discoverCustomItemsBeforeSort(config_prefix, item_table, order, settings)
-            if syncMenuAvailability(config_prefix, item_table, settings) then
-                changed = true
-            end
-            local settings_dir = DataStorage:getSettingsDir()
-            local override_path = string.format("%s/%s_menu_order.lua", settings_dir, config_prefix)
+        local is_target = config_prefix == "reader" or config_prefix == "filemanager"
 
-            if changed then
-                saveSettings(settings)
-            end
-
-            if changed or lfs.attributes(override_path) then
-                generateOverrideFile(config_prefix, settings)
+        -- Pre-sort customization is best-effort: if any of our logic throws,
+        -- log it and continue with KOReader's own sort so the menu still opens.
+        if is_target then
+            local pre_ok, pre_err = pcall(preSortCustomization, config_prefix, item_table, order)
+            if not pre_ok then
+                logger.err("MenuCustomizer: pre-sort customization failed:", tostring(pre_err))
             end
         end
 
+        -- Call the original sort OUTSIDE any pcall: an error here belongs to
+        -- KOReader itself and must not be silently swallowed by this plugin.
         local tab_item_table = orig_mergeAndSort(ms_self, config_prefix, item_table, order)
 
-        if config_prefix == "reader" or config_prefix == "filemanager" then
-            local settings = getSettings()
-
-            -- NOTE: The inline-submenu scan no longer runs here. It used to run
-            -- once per session on the first menu build, adding a full traversal
-            -- plus a large settings write to the first top-menu open. The scan
-            -- now happens only when the plugin's own editor is opened (see the
-            -- sub_item_table_func in addToMainMenu below).
-            local disabled_items = (config_prefix == "reader") and settings.reader_disabled or settings.filemanager_disabled
-            if disabled_items and next(disabled_items) then
-                -- tab_item_table is an array of tabs; each tab is an array of
-                -- menu items. Filter each tab separately so inline (id-less)
-                -- submenu items like "sort_by::some_label" are actually reached.
-                for _, tab_items in ipairs(tab_item_table) do
-                    filterItems(tab_items, disabled_items)
-                end
+        -- Post-sort filtering is best-effort too: on failure, return the
+        -- unfiltered menu rather than crashing the whole menu build.
+        if is_target then
+            local post_ok, post_err = pcall(postSortFiltering, config_prefix, tab_item_table)
+            if not post_ok then
+                logger.err("MenuCustomizer: post-sort filtering failed:", tostring(post_err))
             end
         end
 
