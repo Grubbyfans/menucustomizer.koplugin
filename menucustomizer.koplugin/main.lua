@@ -225,6 +225,11 @@ local function loadSettingsFromDisk()
             data.custom_items_filemanager = data.custom_items_filemanager or {}
             data.items_order_reader = data.items_order_reader or {}
             data.items_order_filemanager = data.items_order_filemanager or {}
+            -- Quarantine holds the customization of items that vanished for a
+            -- session (e.g. a plugin was temporarily disabled), so it can be
+            -- restored when the item reappears instead of being lost forever.
+            data.quarantine_reader = data.quarantine_reader or {}
+            data.quarantine_filemanager = data.quarantine_filemanager or {}
             -- Inline submenu caches moved to INLINE_SETTINGS_FILE in v1.9. Keep
             -- the legacy embedded arrays for a one-time migration, then drop
             -- them from the settings table so they are no longer serialized.
@@ -263,6 +268,8 @@ local function loadSettingsFromDisk()
         custom_items_order_filemanager = {},
         items_order_reader = {},
         items_order_filemanager = {},
+        quarantine_reader = {},
+        quarantine_filemanager = {},
         hide_unavailable = true,
     }
 end
@@ -446,6 +453,39 @@ local function saveSettings(settings)
         out("    },\n")
     end
 
+    -- Quarantine entries are id -> { parent=string, disabled=bool|nil,
+    -- cache=string|false|nil }. Preserve them verbatim so a temporarily
+    -- missing item's customization survives a restart and can be restored.
+    local function writeQuarantine(name, tbl)
+        out("    " .. name .. " = {\n")
+        if tbl then
+            local keys = {}
+            for k in pairs(tbl) do table.insert(keys, k) end
+            table.sort(keys)
+            for _, k in ipairs(keys) do
+                local e = tbl[k]
+                if type(e) == "table" then
+                    out(string.format("        [%q] = {\n", k))
+                    if e.parent ~= nil then
+                        out(string.format("            parent = %q,\n", tostring(e.parent)))
+                    end
+                    if e.disabled ~= nil then
+                        out(string.format("            disabled = %s,\n", e.disabled and "true" or "false"))
+                    end
+                    if e.cache ~= nil then
+                        if type(e.cache) == "string" and e.cache ~= "" then
+                            out(string.format("            cache = %q,\n", e.cache))
+                        elseif e.cache == false then
+                            out("            cache = false,\n")
+                        end
+                    end
+                    out("        },\n")
+                end
+            end
+        end
+        out("    },\n")
+    end
+
     --- Write custom_items_order_* as ordered arrays grouped by parent.
     local function writeOrderedItems(name, tbl)
         out("    " .. name .. " = {\n")
@@ -482,6 +522,8 @@ local function saveSettings(settings)
     writeOrderedItems("custom_items_order_filemanager", settings.custom_items_order_filemanager or {})
     writeOrderedItems("items_order_reader", settings.items_order_reader or {})
     writeOrderedItems("items_order_filemanager", settings.items_order_filemanager or {})
+    writeQuarantine("quarantine_reader", settings.quarantine_reader or {})
+    writeQuarantine("quarantine_filemanager", settings.quarantine_filemanager or {})
     out(string.format("    hide_unavailable = %s,\n", settings.hide_unavailable and "true" or "false"))
     out("}\n")
 
@@ -2344,6 +2386,38 @@ local function discoverCustomItemsBeforeSort(config_prefix, item_table, order, s
 
     -- Update custom_items hash
     local changed = false
+
+    local is_reader = (config_prefix == "reader")
+    local quarantine = is_reader and settings.quarantine_reader or settings.quarantine_filemanager
+    if not quarantine then
+        quarantine = {}
+        if is_reader then
+            settings.quarantine_reader = quarantine
+        else
+            settings.quarantine_filemanager = quarantine
+        end
+    end
+
+    -- Restore customizations stashed when the item was absent in an earlier
+    -- session (e.g. a plugin was temporarily disabled). Without this, simply
+    -- re-enabling the plugin would silently lose the user's hide/order choice.
+    -- Runs before prune so a just-restored item is never mistaken for stale.
+    local disabled_tbl = is_reader and settings.reader_disabled or settings.filemanager_disabled
+    local cache_tbl = is_reader and settings.text_cache_reader or settings.text_cache_filemanager
+    for id in pairs(discovered) do
+        local saved = quarantine[id]
+        if saved then
+            if saved.disabled ~= nil and disabled_tbl then
+                disabled_tbl[id] = saved.disabled
+            end
+            if saved.cache ~= nil and cache_tbl then
+                cache_tbl[id] = saved.cache
+            end
+            quarantine[id] = nil
+            changed = true
+        end
+    end
+
     for id, parent in pairs(discovered) do
         if custom_items[id] ~= parent then
             custom_items[id] = parent
@@ -2351,18 +2425,23 @@ local function discoverCustomItemsBeforeSort(config_prefix, item_table, order, s
         end
     end
 
-    -- Prune custom items that are no longer present
+    -- Prune custom items that are no longer present. Instead of discarding the
+    -- user's customization outright, stash it in the quarantine so it can be
+    -- restored if the item returns. A genuinely removed plugin just leaves a
+    -- small dormant entry, which is harmless and bounded by the plugin count.
     for id in pairs(custom_items) do
         if not discovered[id] then
-            custom_items[id] = nil
-            local disabled_tbl = (config_prefix == "reader") and settings.reader_disabled or settings.filemanager_disabled
-            local cache_tbl = (config_prefix == "reader") and settings.text_cache_reader or settings.text_cache_filemanager
+            local saved = { parent = custom_items[id] }
             if disabled_tbl and disabled_tbl[id] ~= nil then
+                saved.disabled = disabled_tbl[id]
                 disabled_tbl[id] = nil
             end
             if cache_tbl and cache_tbl[id] ~= nil then
+                saved.cache = cache_tbl[id]
                 cache_tbl[id] = nil
             end
+            quarantine[id] = saved
+            custom_items[id] = nil
             changed = true
         end
     end
