@@ -40,18 +40,36 @@ local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
 local T = require("ffi/util").template
 
--- ── Localization (en/uk) ────────────────────────────────────────────
--- Language is read from G_reader_settings:readSetting("language"); any
--- locale other than "uk*" falls back to English.
-local function is_uk_language()
+-- ── Localization (zh/en/uk) ─────────────────────────────────────────
+-- Language is read from G_reader_settings:readSetting("language").
+-- KOReader leaves "language" unset when the UI is in its default English;
+-- in that case this plugin defaults to Chinese so Chinese users see Chinese
+-- without having to switch KOReader's whole UI language first.
+--   "zh*" / unset -> Chinese (simplified)
+--   "uk*"         -> Ukrainian
+--   explicit "en*"/"C" -> English
+local function get_ui_language()
     local lang = G_reader_settings and G_reader_settings:readSetting("language")
-    return type(lang) == "string" and lang:sub(1, 2) == "uk"
+    if type(lang) == "string" and lang ~= "" then
+        return lang
+    end
+    return "zh"
 end
 
---- Pick the English or Ukrainian variant of a string.
-local function tr(en, uk)
+local function is_uk_language()
+    return get_ui_language():sub(1, 2) == "uk"
+end
+
+local function is_zh_language()
+    return get_ui_language():sub(1, 2) == "zh"
+end
+
+--- Pick the Chinese / Ukrainian / English variant of a string.
+local function tr(en, uk, zh)
     if is_uk_language() then
         return uk or en
+    elseif is_zh_language() then
+        return zh or en
     end
     return en
 end
@@ -819,38 +837,38 @@ end
 
 --- Fallback labels for items that don't have .text in tab_item_table
 --- (tabs are icon-based; submenus may lack explicit text entries).
---- Each entry is an { english, ukrainian } pair, resolved through tr().
+--- Each entry is an { english, ukrainian, chinese } triple, resolved via tr().
 local ENGLISH_SOURCES = {
     -- Tabs (icon-based, no .text in tab_item_table)
-    navi                 = { "Navigation", "Навігація" },
-    typeset              = { "Typeset", "Налаштування книжки" },
-    setting              = { "Settings", "Налаштування" },
-    tools                = { "Tools", "Інструменти" },
-    search               = { "Search", "Пошук" },
-    -- filemanager          = { "File browser", "Оглядач файлів" },
-    main                 = { "More tools", "Додатково" },
+    navi                 = { "Navigation", "Навігація", "导航" },
+    typeset              = { "Typeset", "Налаштування книжки", "排版" },
+    setting              = { "Settings", "Налаштування", "设置" },
+    tools                = { "Tools", "Інструменти", "工具" },
+    search               = { "Search", "Пошук", "搜索" },
+    -- filemanager          = { "File browser", "Оглядач файлів", "文件浏览器" },
+    main                 = { "More tools", "Додатково", "更多工具" },
     -- plus_menu            = { "Plus menu", "Додаткове меню" },
-    filemanager_settings = { "File browser", "Файловий менеджер" },
-    reader               = { "Reader", "Читання" },
+    filemanager_settings = { "File browser", "Файловий менеджер", "文件浏览器" },
+    reader               = { "Reader", "Читання", "阅读" },
     -- Submenus (may not have explicit text entries in tab_item_table)
-    -- navi_settings        = { "Settings", "Налаштування" },
+    -- navi_settings        = { "Settings", "Налаштування", "设置" },
     -- document             = { "Document", "Документ" },
     -- device               = { "Device", "Пристрій" },
-    -- navigation           = { "Navigation", "Навігація" },
+    -- navigation           = { "Navigation", "Навігація", "导航" },
     -- network              = { "Network", "Мережа" },
     -- screen               = { "Screen", "Екран" },
     -- taps_and_gestures    = { "Taps and gestures", "Жести й дотики" },
-    -- more_tools           = { "More tools", "Додатково" },
-    -- search_settings      = { "Settings", "Налаштування" },
+    -- more_tools           = { "More tools", "Додатково", "更多工具" },
+    -- search_settings      = { "Settings", "Налаштування", "设置" },
     -- help                 = { "Help", "Довідка" },
     -- exit_menu            = { "Exit", "Вихід" },
 }
 
---- Resolve a fallback label (an {en, uk} pair) for an id, or nil.
+--- Resolve a fallback label (an {en, uk, zh} triple) for an id, or nil.
 local function localizedSource(id)
     local source = ENGLISH_SOURCES[id]
     if type(source) == "table" then
-        return tr(source[1], source[2])
+        return tr(source[1], source[2], source[3])
     end
     return nil
 end
@@ -960,9 +978,9 @@ end
 --- "not yet checked in that mode".
 local function decorateLabel(label, status)
     if status == "unavailable" then
-        return label .. " " .. tr("(unavailable in this mode)", "(недоступно в цьому режимі)")
+        return label .. " " .. tr("(unavailable in this mode)", "(недоступно в цьому режимі)", "（此模式下不可用）")
     elseif status == "unknown" then
-        return label .. " " .. tr("(needs verification)", "(потрібна перевірка)")
+        return label .. " " .. tr("(needs verification)", "(потрібна перевірка)", "（待验证）")
     end
     return label
 end
@@ -995,9 +1013,9 @@ end
 --- Localized label for a menu mode ("reader" / "filemanager").
 local function modeLabel(mode)
     if mode == "reader" then
-        return tr("Reader", "Читання")
+        return tr("Reader", "Читання", "阅读")
     end
-    return tr("File browser", "Оглядач файлів")
+    return tr("File browser", "Оглядач файлів", "文件浏览器")
 end
 
 --- Collect every item id that the mode's menu_order structure *expects*
@@ -1689,12 +1707,12 @@ local function showMoveDestinationChooser(mode, settings, item_id, from_menu_id,
         local target_id = entry.id
         if order[target_id] then
             local label = resolveContainerLabel(target_id, entry.is_tab, text_lookup, other_mode_cache)
-            local prefix = entry.is_tab and tr("[Tab] ", "[Вкладка] ") or tr("[Menu] ", "[Меню] ")
+            local prefix = entry.is_tab and tr("[Tab] ", "[Вкладка] ", "[标签页] ") or tr("[Menu] ", "[Меню] ", "[菜单] ")
             local is_current = (target_id == from_menu_id)
             if is_current then
                 -- Keep the source container as a non-selectable anchor so its
                 -- submenus stay visually attached to it in the tree.
-                label = label .. " " .. tr("(current)", "(поточне)")
+                label = label .. " " .. tr("(current)", "(поточне)", "（当前）")
             else
                 target_count = target_count + 1
             end
@@ -1713,13 +1731,13 @@ local function showMoveDestinationChooser(mode, settings, item_id, from_menu_id,
 
     if target_count == 0 then
         UIManager:show(InfoMessage:new{
-            text = tr("There are no other tabs or submenus to move to.", "Немає інших вкладок чи підменю для переміщення."),
+            text = tr("There are no other tabs or submenus to move to.", "Немає інших вкладок чи підменю для переміщення.", "没有其他标签页或子菜单可移动到此。"),
         })
         return
     end
 
     chooser = Menu:new{
-        title = T(tr("Move \"%1\" to:", "Перемістити «%1» в:"), item_label),
+        title = T(tr("Move \"%1\" to:", "Перемістити «%1» в:", "将“%1”移动到："), item_label),
         item_table = choices,
         is_popout = false, -- square corners (no rounded popup look)
 		is_borderless = true, 
@@ -1733,7 +1751,7 @@ local function showReorderSortWidget(mode, settings, menu_id, text_lookup, other
     local items = order[menu_id]
     if not items or type(items) ~= "table" then
         UIManager:show(InfoMessage:new{
-            text = tr("This menu has no items to reorder.", "Це меню не містить пунктів для зміни порядку."),
+            text = tr("This menu has no items to reorder.", "Це меню не містить пунктів для зміни порядку.", "此菜单没有可排序的项目。"),
         })
         return
     end
@@ -1750,7 +1768,7 @@ local function showReorderSortWidget(mode, settings, menu_id, text_lookup, other
     local rebuild
     local showRowActions
 
-    local separator_row_text = tr("--- Separator ---", "--- Розділювач ---")
+    local separator_row_text = tr("--- Separator ---", "--- Розділювач ---", "--- 分隔线 ---")
 
     --- Persist the widget's current rows (including not yet committed
     --- reordering) into items_order_<mode> for this parent.
@@ -1799,7 +1817,7 @@ local function showReorderSortWidget(mode, settings, menu_id, text_lookup, other
                 or prev_row.item_id == SEPARATOR_ID
                 or next_row.item_id == SEPARATOR_ID then
             UIManager:show(InfoMessage:new{
-                text = tr("A separator cannot be placed at the start, at the end, or next to another separator.", "Розділювач не можна ставити на початок, у кінець або впритул до іншого розділювача."),
+                text = tr("A separator cannot be placed at the start, at the end, or next to another separator.", "Розділювач не можна ставити на початок, у кінець або впритул до іншого розділювача.", "分隔线不能放在开头、结尾或紧邻另一条分隔线。"),
             })
             return
         end
@@ -1828,7 +1846,7 @@ local function showReorderSortWidget(mode, settings, menu_id, text_lookup, other
         local buttons = {}
         if not is_separator then
             table.insert(buttons, {{
-                text = tr("Move to another tab/menu…", "Перемістити в іншу вкладку/меню…"),
+                text = tr("Move to another tab/menu…", "Перемістити в іншу вкладку/меню…", "移动到其他标签页/菜单…"),
                 align = "left",
                 callback = function()
                     UIManager:close(dialog)
@@ -1840,7 +1858,7 @@ local function showReorderSortWidget(mode, settings, menu_id, text_lookup, other
             }})
         end
         table.insert(buttons, {{
-            text = tr("Insert separator before", "Вставити розділювач перед"),
+            text = tr("Insert separator before", "Вставити розділювач перед", "在上方插入分隔线"),
             align = "left",
             callback = function()
                 UIManager:close(dialog)
@@ -1848,7 +1866,7 @@ local function showReorderSortWidget(mode, settings, menu_id, text_lookup, other
             end,
         }})
         table.insert(buttons, {{
-            text = tr("Insert separator after", "Вставити розділювач після"),
+            text = tr("Insert separator after", "Вставити розділювач після", "在下方插入分隔线"),
             align = "left",
             callback = function()
                 UIManager:close(dialog)
@@ -1857,7 +1875,7 @@ local function showReorderSortWidget(mode, settings, menu_id, text_lookup, other
         }})
         if is_separator then
             table.insert(buttons, {{
-                text = tr("Delete separator", "Видалити розділювач"),
+                text = tr("Delete separator", "Видалити розділювач", "删除分隔线"),
                 align = "left",
                 callback = function()
                     UIManager:close(dialog)
@@ -1915,7 +1933,7 @@ local function showReorderSortWidget(mode, settings, menu_id, text_lookup, other
     local sort_items = build_sort_items()
     if #sort_items == 0 then
         UIManager:show(InfoMessage:new{
-            text = tr("This menu has no items to reorder.", "Це меню не містить пунктів для зміни порядку."),
+            text = tr("This menu has no items to reorder.", "Це меню не містить пунктів для зміни порядку.", "此菜单没有可排序的项目。"),
         })
         return
     end
@@ -1923,7 +1941,7 @@ local function showReorderSortWidget(mode, settings, menu_id, text_lookup, other
     local menu_label = resolveContainerLabel(menu_id, is_tab, text_lookup, other_mode_cache)
 
     sort_widget = SortWidget:new{
-        title = T(tr("Reorder: %1", "Змінити порядок: %1"), menu_label),
+        title = T(tr("Reorder: %1", "Змінити порядок: %1", "排序：%1"), menu_label),
         item_table = sort_items,
         callback = function()
             saveSortList()
@@ -1934,7 +1952,7 @@ local function showReorderSortWidget(mode, settings, menu_id, text_lookup, other
         local marked_item = (self.marked > 0 and self.item_table[self.marked]) or nil
         if not marked_item then
             UIManager:show(InfoMessage:new{
-                text = tr("First mark an item (tap its row) to move it or add a separator.", "Спершу позначте пункт (тап по рядку), щоб перемістити його або вставити розділювач."),
+                text = tr("First mark an item (tap its row) to move it or add a separator.", "Спершу позначте пункт (тап по рядку), щоб перемістити його або вставити розділювач.", "先点选一个项目（轻触其行），再移动它或添加分隔线。"),
             })
             return true
         end
@@ -1952,7 +1970,7 @@ local function showReorderChooser(mode, settings, text_lookup, other_mode_cache)
 
     if #containers == 0 then
         UIManager:show(InfoMessage:new{
-            text = tr("No tabs or submenus available.", "Немає доступних вкладок чи підменю."),
+            text = tr("No tabs or submenus available.", "Немає доступних вкладок чи підменю.", "没有可用的标签页或子菜单。"),
         })
         return
     end
@@ -1962,7 +1980,7 @@ local function showReorderChooser(mode, settings, text_lookup, other_mode_cache)
     for __, entry in ipairs(containers) do
         local container_id = entry.id
         local label = resolveContainerLabel(container_id, entry.is_tab, text_lookup, other_mode_cache)
-        local prefix = entry.is_tab and tr("[Tab] ", "[Вкладка] ") or tr("[Menu] ", "[Меню] ")
+        local prefix = entry.is_tab and tr("[Tab] ", "[Вкладка] ", "[标签页] ") or tr("[Menu] ", "[Меню] ", "[菜单] ")
         table.insert(choices, {
             text = prefix .. label,
             indent = Device.screen:scaleBySize(18) * (entry.depth or 0),
@@ -1974,7 +1992,7 @@ local function showReorderChooser(mode, settings, text_lookup, other_mode_cache)
     end
 
     chooser = Menu:new{
-        title = tr("Select a tab or menu to reorder", "Виберіть вкладку чи меню для зміни порядку"),
+        title = tr("Select a tab or menu to reorder", "Виберіть вкладку чи меню для зміни порядку", "选择要排序的标签页或菜单"),
         item_table = choices,
         is_popout = false, -- square corners (no rounded popup look)
 		is_borderless = true, 
@@ -2035,32 +2053,32 @@ local function buildModeMenu(mode, settings, text_lookup, other_mode_cache, ui)
         sub_item_table[#sub_item_table].separator = true
     end
     table.insert(sub_item_table, {
-        text = tr("Reorder / move items", "Змінити порядок / перемістити пункти"),
+        text = tr("Reorder / move items", "Змінити порядок / перемістити пункти", "排序 / 移动项目"),
         keep_menu_open = true,
         callback = function()
             showReorderChooser(mode, settings, text_lookup, other_mode_cache)
         end,
     })
     table.insert(sub_item_table, {
-        text = tr("Apply changes (restart required)", "Застосувати зміни (потрібен перезапуск)"),
+        text = tr("Apply changes (restart required)", "Застосувати зміни (потрібен перезапуск)", "应用更改（需要重启）"),
         keep_menu_open = true,
         callback = function()
             if generateOverrideFile(mode, settings) then
                 if not restartApp(ui) then
                     local mode_label = modeLabel(mode)
                     UIManager:show(InfoMessage:new{
-                        text = T(tr("Menu order file for '%1' mode created.\n\nRestart KOReader to apply the changes.", "Файл порядку меню для режиму '%1' успішно створено.\n\nПерезапустіть KOReader, щоб застосувати зміни."), mode_label),
+                        text = T(tr("Menu order file for '%1' mode created.\n\nRestart KOReader to apply the changes.", "Файл порядку меню для режиму '%1' успішно створено.\n\nПерезапустіть KOReader, щоб застосувати зміни.", "已为“%1”模式生成菜单顺序文件。\n\n请重启 KOReader 以应用更改。"), mode_label),
                     })
                 end
             else
                 UIManager:show(InfoMessage:new{
-                    text = tr("Failed to create the menu order file.", "Помилка створення файлу порядку меню."),
+                    text = tr("Failed to create the menu order file.", "Помилка створення файлу порядку меню.", "创建菜单顺序文件失败。"),
                 })
             end
         end,
     })
     table.insert(sub_item_table, {
-        text = tr("Reset to defaults", "Скинути за замовчуванням"),
+        text = tr("Reset to defaults", "Скинути за замовчуванням", "恢复默认"),
         keep_menu_open = true,
         callback = function()
             if mode == "reader" then
@@ -2085,7 +2103,7 @@ local function buildModeMenu(mode, settings, text_lookup, other_mode_cache, ui)
             if not restartApp(ui) then
                 local mode_label = modeLabel(mode)
                 UIManager:show(InfoMessage:new{
-                    text = T(tr("Menu for '%1' mode reset to defaults.\n\nRestart KOReader to apply.", "Меню режиму '%1' скинуто за замовчуванням.\n\nПерезапустіть KOReader для застосування."), mode_label),
+                    text = T(tr("Menu for '%1' mode reset to defaults.\n\nRestart KOReader to apply.", "Меню режиму '%1' скинуто за замовчуванням.\n\nПерезапустіть KOReader для застосування.", "“%1”模式的菜单已恢复默认。\n\n请重启 KOReader 以应用。"), mode_label),
                 })
             end
         end,
@@ -2371,11 +2389,11 @@ function MenuCustomizer:addToMainMenu(menu_items)
     end
 
     menu_items.menu_customizer = {
-        text = tr("Menu customizer", "Налаштування меню"),
+        text = tr("Menu customizer", "Налаштування меню", "菜单自定义"),
         -- sorting_hint замінено на явне додавання в reader_menu_order та filemanager_menu_order
         sub_item_table = {
             {
-                text = tr("Reader menu", "Меню читання"),
+                text = tr("Reader menu", "Меню читання", "阅读菜单"),
                 sub_item_table_func = function()
                     local settings = getSettings()
                     -- Keep whichever mode we're actually running in up to
@@ -2399,7 +2417,7 @@ function MenuCustomizer:addToMainMenu(menu_items)
                 end,
             },
             {
-                text = tr("File browser menu", "Меню оглядача файлів"),
+                text = tr("File browser menu", "Меню оглядача файлів", "文件浏览器菜单"),
                 separator = true,
                 sub_item_table_func = function()
                     local settings = getSettings()
@@ -2419,14 +2437,14 @@ function MenuCustomizer:addToMainMenu(menu_items)
                 end,
             },
             {
-                text = tr("Refresh translations cache", "Оновити кеш перекладів"),
+                text = tr("Refresh translations cache", "Оновити кеш перекладів", "刷新翻译缓存"),
                 keep_menu_open = true,
                 callback = function()
                     local settings = getSettings()
                     local mode = detectMode(self.ui)
                     if not mode then
                         UIManager:show(InfoMessage:new{
-                            text = tr("Could not determine the current mode (reader or file browser).", "Не вдалося визначити поточний режим (читання чи оглядач файлів)."),
+                            text = tr("Could not determine the current mode (reader or file browser).", "Не вдалося визначити поточний режим (читання чи оглядач файлів).", "无法确定当前模式（阅读或文件浏览器）。"),
                         })
                         return
                     end
@@ -2446,13 +2464,13 @@ function MenuCustomizer:addToMainMenu(menu_items)
                     local mode_label = modeLabel(mode)
                     local other_mode_label = modeLabel(mode == "reader" and "filemanager" or "reader")
                     UIManager:show(InfoMessage:new{
-                        text = T(tr("Translations cache for '%1' mode refreshed.\n\nWith translation: %2\nUnavailable in this mode: %3\n\nTo refresh the cache for '%4' mode, open this menu while in that mode.", "Кеш перекладів для режиму '%1' оновлено.\n\nЗ перекладом: %2\nНедоступні в цьому режимі: %3\n\nЩоб оновити кеш для режиму '%4', відкрийте це меню, перебуваючи в тому режимі."),
+                        text = T(tr("Translations cache for '%1' mode refreshed.\n\nWith translation: %2\nUnavailable in this mode: %3\n\nTo refresh the cache for '%4' mode, open this menu while in that mode.", "Кеш перекладів для режиму '%1' оновлено.\n\nЗ перекладом: %2\nНедоступні в цьому режимі: %3\n\nЩоб оновити кеш для режиму '%4', відкрийте це меню, перебуваючи в тому режимі.", "已刷新“%1”模式的翻译缓存。\n\n有翻译：%2\n此模式下不可用：%3\n\n要刷新“%4”模式的缓存，请在该模式下打开此菜单。"),
                             mode_label, ok_count, unavailable_count, other_mode_label),
                     })
                 end,
             },
             {
-                text = tr("Hide unavailable items", "Приховувати недоступні пункти"),
+                text = tr("Hide unavailable items", "Приховувати недоступні пункти", "隐藏不可用的项目"),
                 checked_func = function()
                     local settings = getSettings()
                     return settings.hide_unavailable
@@ -2466,7 +2484,7 @@ function MenuCustomizer:addToMainMenu(menu_items)
                 keep_menu_open = true,
             },
             {
-                text = tr("Apply all changes", "Застосувати всі зміни"),
+                text = tr("Apply all changes", "Застосувати всі зміни", "应用所有更改"),
                 keep_menu_open = true,
                 callback = function()
                     local settings = getSettings()
@@ -2475,18 +2493,18 @@ function MenuCustomizer:addToMainMenu(menu_items)
                     if ok1 and ok2 then
                         if not restartApp(self.ui) then
                             UIManager:show(InfoMessage:new{
-                                text = tr("Menu order files for reader and file browser created.\n\nRestart KOReader to apply the changes.", "Файли порядку меню для читання та оглядача файлів створено.\n\nПерезапустіть KOReader, щоб застосувати зміни."),
+                                text = tr("Menu order files for reader and file browser created.\n\nRestart KOReader to apply the changes.", "Файли порядку меню для читання та оглядача файлів створено.\n\nПерезапустіть KOReader, щоб застосувати зміни.", "已为阅读和文件浏览器模式生成菜单顺序文件。\n\n请重启 KOReader 以应用更改。"),
                             })
                         end
                     else
                         UIManager:show(InfoMessage:new{
-                            text = tr("Failed to create some menu order files.", "Помилка створення деяких файлів порядку меню."),
+                            text = tr("Failed to create some menu order files.", "Помилка створення деяких файлів порядку меню.", "部分菜单顺序文件创建失败。"),
                         })
                     end
                 end,
             },
             {
-                text = tr("Reset everything to defaults", "Скинути все за замовчуванням"),
+                text = tr("Reset everything to defaults", "Скинути все за замовчуванням", "全部恢复默认"),
                 keep_menu_open = true,
                 callback = function()
                     -- Clear all settings
@@ -2510,13 +2528,13 @@ function MenuCustomizer:addToMainMenu(menu_items)
                     resetInlineMenus()
                     if not restartApp(self.ui) then
                         UIManager:show(InfoMessage:new{
-                            text = tr("All menu settings were reset to defaults.\n\nRestart KOReader to apply.", "Усі налаштування меню скинуто за замовчуванням.\n\nПерезапустіть KOReader для застосування."),
+                            text = tr("All menu settings were reset to defaults.\n\nRestart KOReader to apply.", "Усі налаштування меню скинуто за замовчуванням.\n\nПерезапустіть KOReader для застосування.", "所有菜单设置已恢复默认。\n\n请重启 KOReader 以应用。"),
                         })
                     end
                 end,
             },
             {
-                text = tr("Created files info", "Інформація про створені файли"),
+                text = tr("Created files info", "Інформація про створені файли", "已创建文件信息"),
                 keep_menu_open = true,
                 callback = function()
                     local settings_dir = DataStorage:getSettingsDir()
@@ -2525,11 +2543,11 @@ function MenuCustomizer:addToMainMenu(menu_items)
                     local reader_exists = lfs.attributes(reader_path, "mode") ~= nil
                     local fm_exists = lfs.attributes(fm_path, "mode") ~= nil
 
-                    local created_label = tr("created", "створено")
-                    local not_created_label = tr("not created", "не створено")
-                    local text = tr("Created settings files:\n\n", "Створені файли налаштувань:\n\n")
-                    text = text .. tr("Reader: ", "Читання: ") .. (reader_exists and (created_label .. " (" .. reader_path .. ")") or not_created_label) .. "\n\n"
-                    text = text .. tr("File browser: ", "Оглядач файлів: ") .. (fm_exists and (created_label .. " (" .. fm_path .. ")") or not_created_label)
+                    local created_label = tr("created", "створено", "已创建")
+                    local not_created_label = tr("not created", "не створено", "未创建")
+                    local text = tr("Created settings files:\n\n", "Створені файли налаштувань:\n\n", "已创建的设置文件：\n\n")
+                    text = text .. tr("Reader: ", "Читання: ", "阅读：") .. (reader_exists and (created_label .. " (" .. reader_path .. ")") or not_created_label) .. "\n\n"
+                    text = text .. tr("File browser: ", "Оглядач файлів: ", "文件浏览器：") .. (fm_exists and (created_label .. " (" .. fm_path .. ")") or not_created_label)
 
                     UIManager:show(InfoMessage:new{
                         text = text,

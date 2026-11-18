@@ -165,8 +165,10 @@ readable names instead of raw ids.
 ## Localization
 
 The UI follows KOReader's language setting
-(`G_reader_settings:readSetting("language")`). Any locale starting with `uk` is
-shown in Ukrainian; every other locale falls back to English.
+(`G_reader_settings:readSetting("language")`). Locales starting with `uk` are
+shown in Ukrainian, explicit `en*` / `C` locales in English, and everything
+else — including the default where KOReader has no language set — is shown in
+Simplified Chinese.
 
 ## Notes and compatibility
 
