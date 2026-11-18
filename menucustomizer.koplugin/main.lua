@@ -134,6 +134,40 @@ local function stripTabEntries(cache)
     end
 end
 
+--- The plugin's own menu entry and its ancestor containers must never be
+--- disabled. Disabling any of them would remove the only way back into this
+--- editor (a "self-lock"), so they are protected both in the UI (shown greyed
+--- out and non-clickable) and in the data layer (force-removed from every
+--- disabled set on load and on save, repairing pre-existing bad configs).
+local PROTECTED_IDS = {
+    menu_customizer = true, -- the plugin entry itself
+    more_tools = true,      -- its parent submenu (both modes)
+    tools = true,           -- its ancestor tab (both modes)
+}
+
+--- Strip protected ids from a disabled/tab-disabled set, returning true if
+--- anything was removed.
+local function sanitizeDisabledSet(set)
+    if type(set) ~= "table" then return false end
+    local changed = false
+    for id in pairs(PROTECTED_IDS) do
+        if set[id] ~= nil then
+            set[id] = nil
+            changed = true
+        end
+    end
+    return changed
+end
+
+--- Repair all disabled sets in a settings table so the plugin entry can
+--- always be reached again.
+local function sanitizeSettings(settings)
+    sanitizeDisabledSet(settings.reader_disabled)
+    sanitizeDisabledSet(settings.filemanager_disabled)
+    sanitizeDisabledSet(settings.reader_tabs_disabled)
+    sanitizeDisabledSet(settings.filemanager_tabs_disabled)
+end
+
 --- In-memory cache of the currently loaded settings table. There must be
 --- only ONE live settings table per session: every menu builder and every
 --- callback closure needs to read/write the same object, otherwise two
@@ -212,6 +246,7 @@ local function loadSettingsFromDisk()
             end
             stripTabEntries(data.text_cache_reader)
             stripTabEntries(data.text_cache_filemanager)
+            sanitizeSettings(data)
             return data
         end
     end
@@ -375,6 +410,7 @@ end
 --- table doesn't accidentally get saved later and clobber this change.
 local function saveSettings(settings)
     _settings_cache = settings
+    sanitizeSettings(settings)
 
     -- Serialize into an in-memory buffer first, so we can compare against the
     -- on-disk file and skip a redundant write (and its flush) when nothing
@@ -1434,6 +1470,39 @@ local HIDDEN_TABS = {
     reader = true,       -- FM: opens the last document, an action rather than a menu
 }
 
+--- Apply the self-lock protection to an editor entry for a protected id.
+---
+--- Leaf entries (the plugin's own item, which has no children) are fully
+--- greyed out with enabled=false: KOReader then skips their widget entirely,
+--- so they can neither be tapped nor long-pressed.
+---
+--- Container entries (tools tab, more_tools submenu) must stay enterable so
+--- the user can still edit the OTHER items nested below them. Fully greying
+--- them out would lock half the editor. Instead they keep sub_item_table but
+--- lose every disabling callback, are shown with KOReader's native grey
+--- marker (the same "▒" prefix enabled=false produces), and always report
+--- checked. The data-layer sanitizeSettings() is the final safety net.
+local GREY_PREFIX = "\u{2592}\u{200A}" -- Medium Shade + Hair Space
+local function protectEntry(entry, item_id)
+    if not PROTECTED_IDS[item_id] then return entry end
+    entry.checked_func = function() return true end
+    entry.callback = nil
+    entry.hold_callback = nil
+    if entry.sub_item_table then
+        -- Container: stay enterable, but look greyed and cannot be disabled.
+        if type(entry.text) == "string" then
+            entry.text = GREY_PREFIX .. entry.text
+        end
+    else
+        -- Leaf: fully greyed out and non-interactive.
+        entry.enabled = false
+        if type(entry.text) == "string" then
+            entry.text = GREY_PREFIX .. entry.text
+        end
+    end
+    return entry
+end
+
 --- Build a sub_item_table for a submenu's contents.
 local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tabs, settings, mode, is_tab, text_lookup, other_mode_cache, hide_unavailable, inline_children)
     if hide_unavailable == nil then
@@ -1452,7 +1521,7 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
             local child_text = child.text
             if child.is_submenu and child.children and #child.children > 0 then
                 local sub_items = buildSubmenuItems(nil, order, disabled_items, disabled_tabs, settings, mode, false, text_lookup, other_mode_cache, hide_unavailable, child.children)
-                table.insert(sub_item_table, {
+                table.insert(sub_item_table, protectEntry({
                     text = child_text,
                     checked_func = function()
                         return not disabled_items[child_key]
@@ -1466,7 +1535,9 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
                         disabled_items[child_key] = new_state or nil
                         local child_ids = collectChildIds(nil, order, child.children)
                         for _, cid in ipairs(child_ids) do
-                            disabled_items[cid] = new_state or nil
+                            if not PROTECTED_IDS[cid] then
+                                disabled_items[cid] = new_state or nil
+                            end
                         end
                         saveSettings(settings)
                         if touchmenu_instance then
@@ -1475,9 +1546,9 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
                     end,
                     sub_item_table = sub_items,
                     keep_menu_open = true,
-                })
+                }, child_key))
             else
-                table.insert(sub_item_table, {
+                table.insert(sub_item_table, protectEntry({
                     text = child_text,
                     checked_func = function()
                         return not disabled_items[child_key]
@@ -1487,7 +1558,7 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
                         saveSettings(settings)
                     end,
                     keep_menu_open = true,
-                })
+                }, child_key))
             end
         end
         return sub_item_table
@@ -1514,7 +1585,7 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
                     local sub_items = buildSubmenuItems(item_id, order, disabled_items, disabled_tabs, settings, mode, false, text_lookup, other_mode_cache, hide_unavailable)
                     if not (hide_unavailable and #sub_items == 0) then
                         local label = decorateLabel(localized, status)
-                        table.insert(sub_item_table, {
+                        table.insert(sub_item_table, protectEntry({
                             text = label,
                             checked_func = function()
                                 return not disabled_items[item_id]
@@ -1528,7 +1599,9 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
                                 disabled_items[item_id] = new_state or nil
                                 local child_ids = collectChildIds(item_id, order)
                                 for _, cid in ipairs(child_ids) do
-                                    disabled_items[cid] = new_state or nil
+                                    if not PROTECTED_IDS[cid] then
+                                        disabled_items[cid] = new_state or nil
+                                    end
                                 end
                                 saveSettings(settings)
                                 if touchmenu_instance then
@@ -1537,7 +1610,7 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
                             end,
                             sub_item_table = sub_items,
                             keep_menu_open = true,
-                        })
+                        }, item_id))
                     end
                 end
             elseif inline_info and inline_info.children and #inline_info.children > 0 then
@@ -1556,7 +1629,7 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
                 if not (hide_unavailable and status == "unavailable") then
                     local sub_items = buildSubmenuItems(nil, order, disabled_items, disabled_tabs, settings, mode, false, text_lookup, other_mode_cache, hide_unavailable, inline_info.children)
                     local label = decorateLabel(localized, status)
-                    table.insert(sub_item_table, {
+                    table.insert(sub_item_table, protectEntry({
                         text = label,
                         checked_func = function()
                             return not disabled_items[item_id]
@@ -1570,7 +1643,9 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
                             disabled_items[item_id] = new_state or nil
                             local child_ids = collectChildIds(nil, order, inline_info.children)
                             for _, cid in ipairs(child_ids) do
-                                disabled_items[cid] = new_state or nil
+                                if not PROTECTED_IDS[cid] then
+                                    disabled_items[cid] = new_state or nil
+                                end
                             end
                             saveSettings(settings)
                             if touchmenu_instance then
@@ -1579,14 +1654,14 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
                         end,
                         sub_item_table = sub_items,
                         keep_menu_open = true,
-                    })
+                    }, item_id))
                 end
             else
                 -- Regular item — toggle to disable/enable
                 local localized, status = resolveItemLabel(item_id, text_lookup, other_mode_cache)
                 if not (hide_unavailable and status == "unavailable") then
                     local display_text = decorateLabel(localized, status)
-                    table.insert(sub_item_table, {
+                    table.insert(sub_item_table, protectEntry({
                         text = display_text,
                         checked_func = function()
                             return not disabled_items[item_id]
@@ -1596,7 +1671,7 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
                             saveSettings(settings)
                         end,
                         keep_menu_open = true,
-                    })
+                    }, item_id))
                 end
             end
         end
@@ -2041,7 +2116,7 @@ local function buildModeMenu(mode, settings, text_lookup, other_mode_cache, ui)
         local tab_items = buildSubmenuItems(tab_id, order, disabled_items, disabled_tabs, settings, mode, true, text_lookup, other_mode_cache, settings.hide_unavailable)
 
         -- Insert toggle for the entire tab + its sub-items
-        table.insert(sub_item_table, {
+        table.insert(sub_item_table, protectEntry({
             text = label,
             checked_func = function()
                 return not disabled_tabs[tab_id]
@@ -2056,7 +2131,9 @@ local function buildModeMenu(mode, settings, text_lookup, other_mode_cache, ui)
                 disabled_tabs[tab_id] = new_state or nil
                 local child_ids = collectChildIds(tab_id, order)
                 for _, cid in ipairs(child_ids) do
-                    disabled_items[cid] = new_state or nil
+                    if not PROTECTED_IDS[cid] then
+                        disabled_items[cid] = new_state or nil
+                    end
                 end
                 saveSettings(settings)
                 if touchmenu_instance then
@@ -2065,7 +2142,7 @@ local function buildModeMenu(mode, settings, text_lookup, other_mode_cache, ui)
             end,
             sub_item_table = tab_items,
             keep_menu_open = true,
-        })
+        }, tab_id))
         end -- if not HIDDEN_TABS
     end
 
