@@ -1,79 +1,50 @@
-# Menu Customizer for KOReader
+# KOReader 菜单自定义（Menu Customizer）
 
-A KOReader plugin that shows the **full menu hierarchy** of both the Reader and
-the File Browser and lets you **disable, reorder and move** submenus and menu
-items — and **disable** whole tabs — including items added by third‑party
-plugins.
+一个 KOReader 插件，可以展示**阅读器**和**文件浏览器**两套完整菜单层级，并让你**禁用、排序、移动**子菜单和菜单项，以及**禁用**整个标签页——包括第三方插件添加的项。
 
-The plugin writes native KOReader `*_menu_order.lua` override files, so your
-customizations are applied by KOReader's own menu sorter after a restart. No
-core files are patched.
+插件会生成 KOReader 原生的 `*_menu_order.lua` 覆盖文件，重启后由 KOReader 自带的菜单排序器应用你的定制，**不修改任何核心文件**。
 
-## Screenshots
+## 截图
 
 <table>
   <tr>
     <td align="center">
-      <img width="600" height="520" alt="2" src="https://github.com/user-attachments/assets/1895b99c-c32c-4b1a-9d24-d20784e51eeb" />
+      <img width="600" height="520" alt="主菜单" src="https://github.com/user-attachments/assets/1895b99c-c32c-4b1a-9d24-d20784e51eeb" />
       <br>
-      <em>Main menu</em>
+      <em>主菜单</em>
     </td>
     <td align="center">
-      <img width="600" height="575" alt="1" src="https://github.com/user-attachments/assets/8174d88c-d953-414e-b3e5-313e9d4556f9" />
+      <img width="600" height="575" alt="编辑菜单" src="https://github.com/user-attachments/assets/8174d88c-d953-414e-b3e5-313e9d4556f9" />
       <br>
-      <em>Edit menu</em>
+      <em>编辑菜单</em>
     </td>
   </tr>
 </table>
 
-## Features
+## 功能特性
 
-- **Human‑readable labels (main feature)** — the editor shows the real menu
-  titles in the program's language instead of internal item ids (tab names come
-  from a fixed list), so you always see the same names you see in the real menu.
-- **Full hierarchy browser** — expand any tab or submenu and see every item it
-  contains, including nested "inline" submenus that are not declared in the
-  menu‑order tables.
-- **Disable / enable items** — tap an item to toggle it on or off. Disabled
-  items are removed from the real menu at runtime and from the generated order
-  file.
-- **Bulk toggle with long‑tap** — long‑tap a submenu or tab to disable/enable
-  the entry together with all of its children.
-- **Reorder items** — a sort widget lets you drag items into any order within a
-  menu or tab.
-- **Move items between menus** — move an item from one tab/submenu to another;
-  the move is remembered even after a restart. Targets are limited to tabs and
-  submenus that are part of the menu structure — items cannot be moved into
-  nested "inline" submenus.
-- **Third‑party plugin support** — new items registered by other plugins *inside
-  existing tabs and submenus* are discovered automatically and become
-  customizable. Menu‑order **top‑level tabs** (e.g. Bookshelf) are preserved and
-  editable too, while runtime‑injected tabs (Zen UI/ZenOS, Simple UI) are left
-  untouched. See the note in Usage.
-- **No more `NEW:` orphans** — menu items that appear *after* you already
-  generated the order file (e.g. a plugin you installed or updated later) are
-  picked up automatically and inserted into their correct parent menu on the
-  next start, instead of being left as orphans prefixed with `NEW:` at the
-  bottom of the first tab.
-- **Unavailable‑item handling** — items that do not exist on the current device
-  or build are marked, and are **hidden in the editor by default** so the list
-  stays clean and only shows items that are actually available; this can be
-  toggled off at any time.
-- **Safe, minimal writes** — settings and order files are only written when
-  their content actually changed.
-- **Automatic restart** — KOReader is restarted automatically after applying or
-  resetting changes when the programmatic restart is available.
+- **可读的菜单名称（核心功能）**——编辑器里显示的是菜单的真实标题，而不是内部 id，所见即所得。
+- **完整层级浏览**——展开任意标签页或子菜单即可看到其中每一项，包括未在菜单顺序表中声明的嵌套“行内子菜单”。
+- **禁用 / 启用项目**——点按项目即可切换开关。被禁用的项在运行时从真实菜单中移除，也会从生成的顺序文件中剔除。
+- **长按批量切换**——长按子菜单或标签页，可连同其所有子项一起禁用 / 启用。
+- **排序**——用排序界面拖动项目，在同一菜单或标签页内任意调整顺序。
+- **跨菜单移动**——把项目从一个标签页 / 子菜单移到另一个，重启后依然保留。目标仅限于菜单结构中的标签页和子菜单，不能移入嵌套的“行内子菜单”。
+- **第三方插件支持**——其他插件注册到*现有标签页和子菜单*里的新项会被自动发现并可定制；通过修改 `ui/elements/*_menu_order` 声明的**菜单顺序标签页**（如书架）也会被保留和编辑；而运行时注入的标签页（Zen UI / ZenOS、Simple UI）保持原样、不受影响。详见下方说明。
+- **不再出现 `NEW:` 孤儿项**——在生成顺序文件之后才出现的菜单项（例如后来安装或更新的插件），下次启动会被自动归入正确的父菜单，而不是作为带 `NEW:` 前缀的孤儿堆在第一个标签页底部。
+- **不可用项处理**——当前设备 / 版本上不存在的项目会被标记，并**默认在编辑器中隐藏**以保持列表干净；可随时关闭该隐藏开关。
+- **安全、最少写入**——设置文件和顺序文件只在内容真正变化时才写入，减少电子墨水屏的刷新开销。
+- **自动重启**——应用或重置更改后，如果可以程序化重启则自动重启 KOReader，否则提示手动重启。
+- **防自锁保护**——插件自身入口及其父级菜单不会被禁用，避免把自己锁在外面；误操作隐藏的定制在菜单项重新出现时会自动恢复。
 
-## Requirements
+## 环境要求
 
-- KOReader (any recent version with `ui/menusorter.lua`).
-- No additional dependencies.
+- KOReader（任意包含 `ui/menusorter.lua` 的近期版本）。
+- 无额外依赖。
 
-## Installation
+## 安装
 
-1. Download or clone this repository.
-2. Copy the `menucustomizer.koplugin` folder into KOReader's `plugins`
-   directory:
+1. 下载或克隆本仓库。
+2. 把 `menucustomizer.koplugin` 文件夹复制到 KOReader 的 `plugins` 目录：
 
    ```
    koreader/plugins/menucustomizer.koplugin/
@@ -81,117 +52,122 @@ core files are patched.
    └── main.lua
    ```
 
-3. Restart KOReader.
+3. 重启 KOReader。
 
-## Usage
+## 操作说明
 
 > [!IMPORTANT]
-> - **KOReader will restart automatically** when you apply or reset changes
->   (both single‑mode and "Apply all changes"). Save any work first; if a
->   programmatic restart is not available, the plugin asks you to restart
->   manually instead.
-> - **Press "Refresh translations cache" once in each mode** (Reader and File
->   browser) so menu item names are cached for that mode. Readable names are the
->   main feature of this plugin: if a mode's cache was never filled, its items
->   may appear as internal ids or with "(needs verification)". Opening either
->   hierarchy while in a mode also refreshes that mode's cache automatically.
+> - **应用或重置更改时 KOReader 会自动重启**（包括单模式的“应用更改”和“应用所有更改”）。请先保存好正在阅读的进度；如果无法程序化重启，插件会提示你手动重启。
+> - **建议在每个模式下各点一次“刷新翻译缓存”**（阅读器和文件浏览器各一次），以便缓存该模式的菜单项名称。可读的名称是本插件的核心功能：如果某个模式的缓存从未填充，该模式的项目可能显示为内部 id 或带“（待验证）”标记。在某个模式下打开对应层级菜单时，也会自动刷新该模式的缓存。
 
 > [!NOTE]
-> **Third‑party tabs are partially supported.** How a tab is handled depends on
-> how the plugin adds it:
-> - **Menu‑order tabs** — declared by patching `ui/elements/*_menu_order` and
->   `KOMenu:menu_buttons` (e.g. **Bookshelf**) — are discovered, kept in the
->   generated override file and shown in the editor, so their items can be
->   enabled/disabled like any other. The override never writes an empty item
->   list for such a tab, so the tab is never wiped.
-> - **Runtime tabs** — injected straight into `tab_item_table` after sorting
->   (e.g. **Zen UI**, **ZenOS**, **Simple UI**) — are added by their own plugin
->   *after* the menu is sorted, so Menu Customizer never lists nor modifies them;
->   they stay exactly as the plugin made them.
+> **第三方标签页为部分支持。** 处理方式取决于插件添加标签页的方式：
+> - **菜单顺序标签页**——通过修改 `ui/elements/*_menu_order` 和 `KOMenu:menu_buttons` 声明的标签页（如**书架**）——会被发现、保留在生成的覆盖文件中并显示在编辑器里，其项目可像其他项一样启用 / 禁用。覆盖文件不会为这类标签页写入空的项目列表，因此标签页不会被清空。
+> - **运行时标签页**——在排序之后直接注入 `tab_item_table` 的标签页（如 **Zen UI**、**ZenOS**、**Simple UI**）——由各自的插件在菜单排序*之后*添加，因此菜单自定义既不会列出也不会修改它们，它们保持原样。
 
-Open the menu and go to **Tools → More tools → Menu customizer** (the entry is
-added to the `more_tools` submenu of the Tools tab in both modes).
+### 1. 打开插件
 
-The top-level **Menu customizer** menu contains:
+进入 **工具 → 更多工具 → 菜单自定义**（两种模式下，入口都会被加入工具标签页的 `more_tools` 子菜单）。
 
-| Menu entry | What it does |
+### 2. 顶层菜单
+
+| 菜单项 | 作用 |
 |---|---|
-| **Reader menu** | Opens the full Reader menu hierarchy for editing. |
-| **File browser menu** | Opens the full File Browser menu hierarchy for editing. |
-| **Refresh translations cache** | Re‑scans the current mode and updates the cached item labels. |
-| **Hide unavailable items** | Toggles whether items that are unavailable in a mode are hidden in the editor. |
-| **Apply all changes** | Generates the menu order files for *both* modes and restarts KOReader. |
-| **Reset everything to defaults** | Clears all plugin settings, removes the generated files and restarts. |
-| **Created files info** | Shows whether the generated order files exist and where they are. |
+| **阅读菜单** | 打开阅读器的完整菜单层级进行编辑。 |
+| **文件浏览器菜单** | 打开文件浏览器的完整菜单层级进行编辑。 |
+| **刷新翻译缓存** | 重新扫描当前模式，更新缓存的项目名称。 |
+| **隐藏不可用的项目** | 切换是否在本模式的编辑器中隐藏不可用项目。 |
+| **应用所有更改** | 为*两种模式*都生成顺序文件并重启 KOReader。 |
+| **全部恢复默认** | 清除插件所有设置、删除生成的文件并重启。**会先弹窗二次确认。** |
+| **已创建文件信息** | 显示生成的顺序文件是否存在，以及它们的位置。 |
 
-Inside the **Reader menu** / **File browser menu** hierarchy:
+> 两种模式的设置是**相互独立**的：在阅读菜单里做的改动不影响文件浏览器菜单，反之亦然。改完一套记得另进一套再改。
 
-- **Tap** a tab, submenu or item to toggle it (a check mark means enabled).
-- **Long‑tap** a tab or submenu to toggle it and all of its children at once.
-- **Reorder / move items** opens a chooser: pick a tab or submenu to reorder its
-  items with a sort widget; long‑tap an item there (or use the widget menu) to
-  move it to another tab/menu.
-- Use **Apply changes (restart required)** at the bottom of each hierarchy to
-  write the order file for that mode and restart.
+### 3. 编辑某个模式的菜单
 
-## How it works
+进入“阅读菜单”或“文件浏览器菜单”后：
 
-The plugin hooks `MenuSorter:mergeAndSort` to:
+- **点按**标签页、子菜单或项目：切换其禁用状态（有勾选标记表示启用）。
+- **长按**标签页或子菜单：连同其所有子项一起切换，可一次性禁用 / 启用整棵子树。
+- **排序 / 移动项目**：打开选择界面，选中某个标签页或子菜单后用排序界面调整其项目顺序；在排序界面里**长按某一项**（或调用界面菜单）可把它移到其他标签页 / 菜单。
+- **应用更改（需要重启）**：位于每层层级菜单底部，写入该模式的顺序文件并重启。
+- **恢复默认**：清空该模式的设置并删除该模式的顺序文件；**会先弹窗二次确认**。
 
-1. Discover custom items registered by third‑party plugins and remember their
-   parent menu.
-2. Preserve **menu‑order top‑level tabs** (e.g. Bookshelf): remember each tab's
-   label and position, re‑insert its id into `KOMenu:menu_buttons`, and never
-   emit an empty item list for it (so the tab can neither be dropped nor wiped).
-   Runtime‑injected tabs (Zen UI/ZenOS, Simple UI) are not touched at all.
-3. Filter out disabled items from the live `tab_item_table` (including items in
-   inline submenus that have no stable `id`).
-4. Generate `reader_menu_order.lua` / `filemanager_menu_order.lua` in KOReader's
-   settings directory, which `MenuSorter` picks up on the next start.
+几个显示约定：
 
-Menu labels for items that are not present in the currently active mode are
-served from a small persistent per‑mode label cache, so the editor still shows
-readable names instead of raw ids.
+- **置灰的项目**（前面带 `▒` 标记）是插件自身入口及其祖先菜单（“菜单自定义”“更多工具”“工具”）。为防止把插件隐藏后无法再进入配置，它们**不能被禁用**：叶子入口完全不可点，容器项仍可进入以编辑其下的其他项目。
+- **“（此模式下不可用）”** 表示该项在当前设备上确认不存在（例如对应插件被禁用 / 未安装，或设备不兼容）。
+- **“（待验证）”** 表示该项从未在当前模式出现过，无法判断是尚未检查还是确实不存在。可点“刷新翻译缓存”来确认。
+- 开启“隐藏不可用的项目”时，带上述后两种标记的项目会从编辑器中隐藏，让列表更清爽；想查看的话在顶层关掉该开关即可。
 
-## Files created
+### 4. 排序与移动项目（含把“更多工具”里的项移到“工具”）
 
-| File | Location | Purpose |
+这是最容易用到、也最容易漏掉的操作，完整步骤如下：
+
+1. 在插件菜单里进入 **阅读菜单** 或 **文件浏览器菜单**。
+2. 点 **排序 / 移动项目**，会列出所有可选的标签页和子菜单。
+3. 选择要调整的**来源容器**。例如要把“更多工具”里的某个菜单项移到“工具”：先选 **[菜单] 更多工具**。
+4. 进入排序界面后，可**拖动**行来调整顺序；要删除分隔线则长按该行。
+5. **长按**要移动的那一项（或点排序界面的菜单键），选择 **移动到其他标签页/菜单…**。
+6. 在目标列表里选择目标容器，例如 **[标签页] 工具**。该项随即成为工具标签页下的直接项，与“更多工具”平级。
+7. 返回菜单点 **应用更改（需要重启）**，重启后生效。
+
+补充说明：
+
+- **想移回去**：路径完全对称——进入“工具”的排序界面，长按该项，选 **[菜单] 更多工具** 即可。
+- **第三方插件项也能移动**：带 `sorting_hint` 的插件项（例如由插件注册进“更多工具”的项）同样适用，移动后不会被排序逻辑还原到原位置。
+- **目标范围**：只能移动到菜单结构中的标签页和子菜单，不能移入嵌套的“行内子菜单”。
+- **插入分隔线**：在排序界面长按某一项，可候选项的上方 / 下方插入分隔线；分隔线不能放在开头、结尾或紧邻另一条分隔线。长按分隔线本身可删除它。
+- **移动限制于单模式内**：跨菜单移动只作用于当前编辑的模式；另一种模式需要单独操作。
+- 所有改动都是先存在设置里，必须点“应用更改”/“应用所有更改”并重启后才会真正生效。
+
+### 5. 隐藏 / 恢复项目与“隔离区”
+
+- 点按某项即可隐藏或恢复它（勾选状态改变）。
+- 如果某个插件被暂时禁用或卸载，其项目会从菜单中消失。此时插件**不会直接丢弃**你对它做的隐藏 / 排序定制，而是存入一个“隔离区”。等插件重新启用、项目再次出现时，之前的定制会**自动恢复**，无需重新设置。
+- 被隐藏的项目可以重新进入编辑器找到并开启，不会因为隐藏而永久失联。
+
+### 6. 重置
+
+- **单模式恢复默认**（在某模式层级菜单底部）：只清空该模式的隐藏项、排序和顺序文件，另一种模式不受影响。**有二次确认。**
+- **全部恢复默认**（顶层菜单）：清空两种模式的所有设置、删除生成的顺序文件、重置行内子菜单缓存并重启。**有二次确认。**
+
+## 工作原理
+
+插件挂钩 `MenuSorter:mergeAndSort`，用于：
+
+1. 发现第三方插件注册的自定义项目并记住其父菜单。
+2. 保留**菜单顺序标签页**（如书架）：记住每个标签页的名称和位置，把它的 id 重新插入 `KOMenu:menu_buttons`，且从不为其写入空的项目列表（因此标签页既不会被丢弃也不会被清空）。运行时注入的标签页（Zen UI / ZenOS、Simple UI）完全不触碰。
+3. 从运行时的 `tab_item_table` 中过滤掉被禁用的项目（包括没有稳定 `id` 的行内子菜单项）。
+4. 在 KOReader 的设置目录生成 `reader_menu_order.lua` / `filemanager_menu_order.lua`，下次启动时由 `MenuSorter` 读取。
+
+对于当前活动模式中不存在的项目，其标签来自一个按模式划分的持久化缓存，因此编辑器仍显示可读名称而非原始 id。
+
+## 生成的文件
+
+| 文件 | 位置 | 用途 |
 |---|---|---|
-| `menu_customizer.lua` | KOReader settings dir | Plugin settings (disabled sets, ordering, custom top‑level tabs, label cache). |
-| `menu_customizer_inline.lua` | KOReader settings dir | Cached nested inline submenus (loaded lazily). |
-| `reader_menu_order.lua` | KOReader settings dir | Generated Reader menu order override. |
-| `filemanager_menu_order.lua` | KOReader settings dir | Generated File Browser menu order override. |
+| `menu_customizer.lua` | KOReader 设置目录 | 插件设置（禁用集合、排序、自定义顶层标签页、标签缓存、隔离区）。 |
+| `menu_customizer_inline.lua` | KOReader 设置目录 | 缓存的嵌套行内子菜单（按需加载）。 |
+| `reader_menu_order.lua` | KOReader 设置目录 | 生成的阅读器菜单顺序覆盖文件。 |
+| `filemanager_menu_order.lua` | KOReader 设置目录 | 生成的文件浏览器菜单顺序覆盖文件。 |
 
-## Localization
+## 本地化
 
-The UI follows KOReader's language setting
-(`G_reader_settings:readSetting("language")`). Locales starting with `uk` are
-shown in Ukrainian, explicit `en*` / `C` locales in English, and everything
-else — including the default where KOReader has no language set — is shown in
-Simplified Chinese.
+界面跟随 KOReader 的语言设置（`G_reader_settings:readSetting("language")`）：以 `uk` 开头的显示为乌克兰语，显式 `en*` / `C` 显示为英语，其余情况——包括 KOReader 未设置语言的默认情况——显示为简体中文。
 
-## Notes and compatibility
+## 注意事项与兼容性
 
-- The plugin does **not** modify KOReader core files; it only monkey‑patches
-  `MenuSorter:mergeAndSort` at runtime and generates standard order‑override
-  files.
-- Because it hooks an internal KOReader module, a future KOReader release may
-  require updates. Many risky operations (file reads/writes, optional callbacks)
-  are wrapped in `pcall`, but the hook itself is not — a future core change may
-  therefore break the menu until the plugin is updated.
-- If a third‑party plugin changes its menu item ids between versions, stale
-  entries are pruned automatically the next time the menu is built.
+- 插件**不修改** KOReader 核心文件；它只在运行时 monkey-patch `MenuSorter:mergeAndSort`，并生成标准的顺序覆盖文件。
+- 由于挂钩了 KOReader 内部模块，未来的 KOReader 版本可能需要插件同步更新。多数有风险的操作（文件读写、可选回调）已用 `pcall` 包裹，但挂钩本身没有——如果核心代码发生变化，可能导致菜单异常，需要等待插件更新。
+- 如果第三方插件在不同版本间更改了菜单项 id，下次构建菜单时会自动清理失效的旧条目（先移入隔离区，因此若项目回来定制仍可恢复）。
 
-## Uninstall
+## 卸载
 
-1. Open **Menu customizer → Reset everything to defaults** to remove the settings
-   and generated order files.
-2. Delete the `menucustomizer.koplugin` folder.
-3. Restart KOReader.
+1. 打开 **菜单自定义 → 全部恢复默认**，清除设置和生成的顺序文件。
+2. 删除 `menucustomizer.koplugin` 文件夹。
+3. 重启 KOReader。
 
-## Disclaimer
+## 免责声明
 
-This plugin and its documentation were generated by AI. The plugin **was tested
-by the developer** on a real Kindle device, but it is still provided "as is":
-review the source code carefully before installing, test it on your own device,
-and keep a backup of your KOReader settings.
+本插件及其文档由 AI 生成。插件**已经由开发者在真实 Kindle 设备上测试**，但仍按“原样”提供：安装前请仔细检查源代码，在自己的设备上测试，并备份好 KOReader 设置。
