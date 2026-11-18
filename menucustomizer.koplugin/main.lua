@@ -29,6 +29,7 @@ settings directory so that MenuSorter picks them up on restart.
 -- Version 1.18: sorting_hint тепер поважає вкладені підменю (screen_eink_opt, physical_buttons_setup): пункт більше не їде в першу вкладку; для inline-підменю без ключа в order розміщення лишається за штатним MenuSorter.
 
 local ButtonDialog = require("ui/widget/buttondialog")
+local ConfirmBox = require("ui/widget/confirmbox")
 local DataStorage = require("datastorage")
 local Device = require("device")
 local InfoMessage = require("ui/widget/infomessage")
@@ -2238,31 +2239,38 @@ local function buildModeMenu(mode, settings, text_lookup, other_mode_cache, ui)
         text = tr("Reset to defaults", "Скинути за замовчуванням", "恢复默认"),
         keep_menu_open = true,
         callback = function()
-            if mode == "reader" then
-                settings.reader_disabled = {}
-                settings.reader_tabs_disabled = {}
-                settings.items_order_reader = {}
-            else
-                settings.filemanager_disabled = {}
-                settings.filemanager_tabs_disabled = {}
-                settings.items_order_filemanager = {}
-            end
-            saveSettings(settings)
+            local mode_label = modeLabel(mode)
+            UIManager:show(ConfirmBox:new{
+                text = T(tr("Reset the '%1' menu to defaults?\n\nAll hidden items and custom ordering for this mode will be lost, and KOReader will restart.", "Скинути меню '%1' до значень за замовчуванням?\n\nУсі приховані пункти та власний порядок для цього режиму буде втрачено, KOReader перезапуститься.", "将“%1”模式的菜单恢复默认？\n\n该模式下所有隐藏项目和自定义排序都会丢失，KOReader 将重启。"), mode_label),
+                ok_text = tr("Reset", "Скинути", "重置"),
+                cancel_text = tr("Cancel", "Скасувати", "取消"),
+                ok_callback = function()
+                    if mode == "reader" then
+                        settings.reader_disabled = {}
+                        settings.reader_tabs_disabled = {}
+                        settings.items_order_reader = {}
+                    else
+                        settings.filemanager_disabled = {}
+                        settings.filemanager_tabs_disabled = {}
+                        settings.items_order_filemanager = {}
+                    end
+                    saveSettings(settings)
 
-            -- Remove override file for this mode
-            local path = string.format("%s/%s_menu_order.lua",
-                DataStorage:getSettingsDir(), mode)
-            if lfs.attributes(path, "mode") then
-                os.remove(path)
-                logger.info("MenuCustomizer: removed", path)
-            end
+                    -- Remove override file for this mode
+                    local path = string.format("%s/%s_menu_order.lua",
+                        DataStorage:getSettingsDir(), mode)
+                    if lfs.attributes(path, "mode") then
+                        os.remove(path)
+                        logger.info("MenuCustomizer: removed", path)
+                    end
 
-            if not restartApp(ui) then
-                local mode_label = modeLabel(mode)
-                UIManager:show(InfoMessage:new{
-                    text = T(tr("Menu for '%1' mode reset to defaults.\n\nRestart KOReader to apply.", "Меню режиму '%1' скинуто за замовчуванням.\n\nПерезапустіть KOReader для застосування.", "“%1”模式的菜单已恢复默认。\n\n请重启 KOReader 以应用。"), mode_label),
-                })
-            end
+                    if not restartApp(ui) then
+                        UIManager:show(InfoMessage:new{
+                            text = T(tr("Menu for '%1' mode reset to defaults.\n\nRestart KOReader to apply.", "Меню режиму '%1' скинуто за замовчуванням.\n\nПерезапустіть KOReader для застосування.", "“%1”模式的菜单已恢复默认。\n\n请重启 KOReader 以应用。"), mode_label),
+                        })
+                    end
+                end,
+            })
         end,
     })
 
@@ -2733,30 +2741,37 @@ function MenuCustomizer:addToMainMenu(menu_items)
                 text = tr("Reset everything to defaults", "Скинути все за замовчуванням", "全部恢复默认"),
                 keep_menu_open = true,
                 callback = function()
-                    -- Clear all settings
-                    local settings = {
-                        reader_disabled = {},
-                        filemanager_disabled = {},
-                        reader_tabs_disabled = {},
-                        filemanager_tabs_disabled = {},
-                        text_cache_reader = {},
-                        text_cache_filemanager = {},
-                        custom_items_reader = {},
-                        custom_items_filemanager = {},
-                        custom_items_order_reader = {},
-                        custom_items_order_filemanager = {},
-                        items_order_reader = {},
-                        items_order_filemanager = {},
-                        hide_unavailable = true,
-                    }
-                    saveSettings(settings)
-                    removeOverrideFiles()
-                    resetInlineMenus()
-                    if not restartApp(self.ui) then
-                        UIManager:show(InfoMessage:new{
-                            text = tr("All menu settings were reset to defaults.\n\nRestart KOReader to apply.", "Усі налаштування меню скинуто за замовчуванням.\n\nПерезапустіть KOReader для застосування.", "所有菜单设置已恢复默认。\n\n请重启 KOReader 以应用。"),
-                        })
-                    end
+                    UIManager:show(ConfirmBox:new{
+                        text = tr("Reset ALL menu settings to defaults?\n\nThis clears hidden items, custom ordering and translation caches for both Reader and File browser modes. It cannot be undone. KOReader will restart.", "Скинути ВСІ налаштування меню до значень за замовчуванням?\n\nЦе очистить приховані пункти, власний порядок та кеш перекладів для режимів читання й оглядача файлів. Дію не можна скасувати. KOReader перезапуститься.", "将所有菜单设置恢复默认？\n\n这将清除阅读和文件浏览器两种模式的隐藏项目、自定义排序和翻译缓存，且无法撤销。KOReader 将重启。"),
+                        ok_text = tr("Reset all", "Скинути все", "全部重置"),
+                        cancel_text = tr("Cancel", "Скасувати", "取消"),
+                        ok_callback = function()
+                            -- Clear all settings
+                            local settings = {
+                                reader_disabled = {},
+                                filemanager_disabled = {},
+                                reader_tabs_disabled = {},
+                                filemanager_tabs_disabled = {},
+                                text_cache_reader = {},
+                                text_cache_filemanager = {},
+                                custom_items_reader = {},
+                                custom_items_filemanager = {},
+                                custom_items_order_reader = {},
+                                custom_items_order_filemanager = {},
+                                items_order_reader = {},
+                                items_order_filemanager = {},
+                                hide_unavailable = true,
+                            }
+                            saveSettings(settings)
+                            removeOverrideFiles()
+                            resetInlineMenus()
+                            if not restartApp(self.ui) then
+                                UIManager:show(InfoMessage:new{
+                                    text = tr("All menu settings were reset to defaults.\n\nRestart KOReader to apply.", "Усі налаштування меню скинуто за замовчуванням.\n\nПерезапустіть KOReader для застосування.", "所有菜单设置已恢复默认。\n\n请重启 KOReader 以应用。"),
+                                })
+                            end
+                        end,
+                    })
                 end,
             },
             {
