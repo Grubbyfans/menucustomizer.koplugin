@@ -688,6 +688,27 @@ local function getEffectiveOrder(mode, settings)
     return order
 end
 
+--- Lua keywords cannot be emitted as bare table keys.
+local LUA_KEYWORDS = {
+    ["and"] = true, ["break"] = true, ["do"] = true, ["else"] = true,
+    ["elseif"] = true, ["end"] = true, ["false"] = true, ["for"] = true,
+    ["function"] = true, ["if"] = true, ["in"] = true, ["local"] = true,
+    ["nil"] = true, ["not"] = true, ["or"] = true, ["repeat"] = true,
+    ["return"] = true, ["then"] = true, ["true"] = true, ["until"] = true,
+    ["while"] = true,
+}
+
+--- Render a table key as valid Lua source: a bare identifier when safe,
+--- ["..."] (with %q escaping) otherwise. Menu item ids may contain ":",
+--- "-" or spaces, which would otherwise produce a syntax-error order file.
+local function formatLuaKey(k)
+    if type(k) == "string" and k:match("^[A-Za-z_][A-Za-z0-9_]*$")
+            and not LUA_KEYWORDS[k] then
+        return k
+    end
+    return string.format("[%q]", tostring(k))
+end
+
 --- Serialize a Lua table of arrays into a string suitable for a menu_order file.
 local function serializeOrder(order)
     local lines = {}
@@ -726,7 +747,7 @@ local function serializeOrder(order)
     for _, k in ipairs(keys) do
         local v = order[k]
         if type(v) == "table" then
-            table.insert(lines, string.format("    %s = {", k))
+            table.insert(lines, string.format("    %s = {", formatLuaKey(k)))
             for _, item in ipairs(v) do
                 table.insert(lines, string.format("        %q,", item))
             end
