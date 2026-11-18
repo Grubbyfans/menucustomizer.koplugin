@@ -1519,46 +1519,63 @@ local function buildSubmenuItems(submenu_id, order, disabled_items, disabled_tab
         for _, child in ipairs(inline_children) do
             local child_key = child.key
             local child_text = child.text
-            if child.is_submenu and child.children and #child.children > 0 then
-                local sub_items = buildSubmenuItems(nil, order, disabled_items, disabled_tabs, settings, mode, false, text_lookup, other_mode_cache, hide_unavailable, child.children)
-                table.insert(sub_item_table, protectEntry({
-                    text = child_text,
-                    checked_func = function()
-                        return not disabled_items[child_key]
-                    end,
-                    callback = function()
-                        disabled_items[child_key] = not disabled_items[child_key] or nil
-                        saveSettings(settings)
-                    end,
-                    hold_callback = function(touchmenu_instance)
-                        local new_state = not disabled_items[child_key]
-                        disabled_items[child_key] = new_state or nil
-                        local child_ids = collectChildIds(nil, order, child.children)
-                        for _, cid in ipairs(child_ids) do
-                            if not PROTECTED_IDS[cid] then
-                                disabled_items[cid] = new_state or nil
-                            end
-                        end
-                        saveSettings(settings)
-                        if touchmenu_instance then
-                            touchmenu_instance:updateItems()
-                        end
-                    end,
-                    sub_item_table = sub_items,
-                    keep_menu_open = true,
-                }, child_key))
-            else
-                table.insert(sub_item_table, protectEntry({
-                    text = child_text,
-                    checked_func = function()
-                        return not disabled_items[child_key]
-                    end,
-                    callback = function()
-                        disabled_items[child_key] = not disabled_items[child_key] or nil
-                        saveSettings(settings)
-                    end,
-                    keep_menu_open = true,
-                }, child_key))
+            -- Inline children used to be emitted unconditionally, unlike order
+            -- items which pass through resolveItemLabel() when hide_unavailable
+            -- is on. Apply the same status check here so an inline child that
+            -- is confirmed absent in this mode is hidden consistently. Only a
+            -- child carrying a real `id` can have a status signal (via the
+            -- other mode's `false` tombstone); id-less children stay visible,
+            -- since their composite key can never be verified and marking
+            -- them all "unknown" would flood the editor with false hints.
+            local lookup_key = child.id or child_key
+            local _, status = resolveItemLabel(lookup_key, text_lookup, other_mode_cache)
+            if not (hide_unavailable and status == "unavailable") then
+                local display_text = (status == "unavailable")
+                    and decorateLabel(child_text or lookup_key, status)
+                    or child_text
+                if child.is_submenu and child.children and #child.children > 0 then
+                    local sub_items = buildSubmenuItems(nil, order, disabled_items, disabled_tabs, settings, mode, false, text_lookup, other_mode_cache, hide_unavailable, child.children)
+                    if not (hide_unavailable and #sub_items == 0) then
+                        table.insert(sub_item_table, protectEntry({
+                            text = display_text,
+                            checked_func = function()
+                                return not disabled_items[child_key]
+                            end,
+                            callback = function()
+                                disabled_items[child_key] = not disabled_items[child_key] or nil
+                                saveSettings(settings)
+                            end,
+                            hold_callback = function(touchmenu_instance)
+                                local new_state = not disabled_items[child_key]
+                                disabled_items[child_key] = new_state or nil
+                                local child_ids = collectChildIds(nil, order, child.children)
+                                for _, cid in ipairs(child_ids) do
+                                    if not PROTECTED_IDS[cid] then
+                                        disabled_items[cid] = new_state or nil
+                                    end
+                                end
+                                saveSettings(settings)
+                                if touchmenu_instance then
+                                    touchmenu_instance:updateItems()
+                                end
+                            end,
+                            sub_item_table = sub_items,
+                            keep_menu_open = true,
+                        }, child_key))
+                    end
+                else
+                    table.insert(sub_item_table, protectEntry({
+                        text = display_text,
+                        checked_func = function()
+                            return not disabled_items[child_key]
+                        end,
+                        callback = function()
+                            disabled_items[child_key] = not disabled_items[child_key] or nil
+                            saveSettings(settings)
+                        end,
+                        keep_menu_open = true,
+                    }, child_key))
+                end
             end
         end
         return sub_item_table
